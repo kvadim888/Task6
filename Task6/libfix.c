@@ -3,9 +3,9 @@
 int32_t	float_to_fix(double num)
 {
 	int32_t	fixed;
-	if (num < -2)
+	if (num < -1)
 		return INT32_MIN;
-	if (num >= 2)
+	if (num >= 1)
 		return INT32_MAX;
 	return num * SCALE31;
 }
@@ -73,5 +73,5 @@ int32_t	fix_rightshift(int32_t num, int8_t shift)
 {
 	t_sample res;
 	res.int32[1] = num;
-	return fix_round(res.int64 >> shift);
+	return fix_round((int64_t)res.int64 >> shift);
 }

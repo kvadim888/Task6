@@ -217,41 +217,29 @@ int16_t		signal_noise(double amplitude)
 
 typedef enum { LPF, HPF }	t_filter_type;
 
-int32_t	double_allpass(double C, int32_t output, int32_t input, int32_t *z1)
+int32_t	dsp_allpassCoeff(double Fc, double samplerate)
 {
-	output = round(C * input + *z1 - C * output);
-	*z1 = input;
-	return output;
-}
-
-int32_t	double_LPfilter(double C, int32_t output, int32_t input, int32_t *z1)
-{
-	return (int32_t)(0.5 * (input + dsp_allpass(C, output, input, z1)));
-}
-
-int32_t	double_HPfilter(double C, int32_t output, int32_t input, int32_t *z1)
-{
-	return (int32_t)(0.5 * (input - dsp_allpass(C, output, input, z1)));
+	double C = -cos(2 * M_PI * Fc / samplerate)/(1 + sin(2 * M_PI * Fc / samplerate));
+	return float_to_fix(C);
 }
 
 int32_t	dsp_allpass(int32_t C, int32_t output, int32_t input, int32_t *z1)
 {
-	t_sample sample = { .int32 = {*z1, 0} };
+	t_sample sample;
+	sample.int64 = ((int64_t)*z1 << 31) + C * input - C * output;
 	*z1 = input;
-	fix_msub(&sample, C, output);
-	return fix_mac(&sample, C, input);
+	sample.int64 = (int64_t)sample.int64 >> 31;
+	return fix_saturate(sample.int64);
 }
 
 int32_t	dsp_LPfilter(int32_t C, int32_t output, int32_t input, int32_t *z1)
 {
-	int32_t result = fix_add(input, dsp_allpass(C, output, input, z1));
-	return fix_rightshift(result, 1);
+	return ((int64_t)input + dsp_allpass(C, output, input, z1)) >> 1;
 }
 
 int32_t	dsp_HPfilter(int32_t C, int32_t output, int32_t input, int32_t *z1)
 {
-	int32_t result = fix_sub(input, dsp_allpass(C, output, input, z1));
-	return fix_rightshift(result, 1);
+	return ((int64_t)input - dsp_allpass(C, output, input, z1)) >> 1;
 }
 
 /*============================================================================*/
@@ -271,7 +259,7 @@ int main(int ac, char **av)
 	double	freq1 = 100;		//	default 100 Hz
 	double	freq2 = freq1;		//	default freq1 == freq2
 	double	phase = 0;			//	default 0
-	double	samplerate = 41300;	// more than Nyquist frequency
+	double	samplerate = 44100;	// more than Nyquist frequency
 
 	/* properties of files ---------------------------*/
 	char	*filepath = NULL;	// name of file with generated signal
@@ -354,23 +342,14 @@ int main(int ac, char **av)
 		case 'a':
 			if ((signal_flag & SIGNAL_AMPLITUDE) == 0)
 			{
-				if (amplitude > 0)
+				double gain = atof(optarg);
+				if (gain > 0)
 				{
-					printf("signal.amplitude > 0 dB\n");
+					printf("signal.gain > 0 dB\n");
 					exit(1);
 				}
-				amplitude = dsp_db2gain(atof(optarg));
+				int32_t amplitude = dsp_db2gain(gain);
 				signal_flag |= SIGNAL_AMPLITUDE;
-			}
-			else
-			{
-				if (amplitude > 0)
-				{
-					printf("end.amplitude > 0 dB\n");
-					exit(1);
-				}
-				amplitude = dsp_db2gain(atof(optarg));
-				end_flag |= SIGNAL_AMPLITUDE;
 			}
 			break;
 		case 'f':
